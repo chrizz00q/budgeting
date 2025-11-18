@@ -1,5 +1,6 @@
         // Chart instances
         let incomeChart = null;
+        let chartView = 'line'; // Default to line chart
 
         // Formatting helpers for currency display
         function formatNumberWithCommas(num) {
@@ -37,86 +38,142 @@
             document.getElementById('amount').value = amount;
         }
 
+        // Toggle between line and bar chart
+        function toggleChartView(view) {
+            chartView = view;
+            
+            // Update active button
+            document.querySelectorAll('.chart-toggle-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update chart
+            updateIncomeChart();
+        }
+
         function updateIncomeChart() {
             const ctx = document.getElementById('incomeChart').getContext('2d');
             
-            // Get income data for the current month
-            const monthTransactions = transactions.filter(t => t.frequency === 'monthly' || isInCurrentMonth(t.date));
-            const incomeTransactions = monthTransactions.filter(t => t.type === 'income');
+            // Get data for the last 6 months
+            const months = [];
+            const incomeData = [];
+            const expenseData = [];
+            const netData = [];
             
-            // Group income by category
-            const categoryTotals = {};
-            incomeTransactions.forEach(t => {
-                if (!categoryTotals[t.category]) {
-                    categoryTotals[t.category] = 0;
-                }
-                categoryTotals[t.category] += t.amount;
-            });
-            
-            const categories = Object.keys(categoryTotals);
-            const amounts = Object.values(categoryTotals);
-            
-            // Generate colors for categories
-            const colors = [
-                '#10b981', '#84cc16', '#22c55e', '#14b8a6', '#06b6d4', 
-                '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7'
-            ];
-            
-            const categoryColors = categories.map((_, i) => colors[i % colors.length]);
+            // Generate data for the last 6 months
+            for (let i = 5; i >= 0; i--) {
+                const date = new Date(currentMonth);
+                date.setMonth(currentMonth.getMonth() - i);
+                
+                const monthYear = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                months.push(monthYear);
+                
+                // Filter transactions for this month
+                const monthTransactions = transactions.filter(t => {
+                    const transactionDate = new Date(t.date);
+                    return transactionDate.getMonth() === date.getMonth() && 
+                           transactionDate.getFullYear() === date.getFullYear();
+                });
+                
+                const monthIncome = monthTransactions
+                    .filter(t => t.type === 'income')
+                    .reduce((sum, t) => sum + t.amount, 0);
+                    
+                const monthExpenses = monthTransactions
+                    .filter(t => t.type === 'expense')
+                    .reduce((sum, t) => sum + t.amount, 0);
+                    
+                const monthNet = monthIncome - monthExpenses;
+                
+                incomeData.push(monthIncome);
+                expenseData.push(monthExpenses);
+                netData.push(monthNet);
+            }
             
             // Update chart legend
             const legend = document.getElementById('incomeLegend');
-            legend.innerHTML = categories.map((category, i) => `
+            legend.innerHTML = `
                 <div class="legend-item">
-                    <div class="legend-color" style="background-color: ${categoryColors[i]};"></div>
-                    <span>${category}: ${formatCurrency(categoryTotals[category])}</span>
+                    <div class="legend-color" style="background-color: #10b981;"></div>
+                    <span>Income</span>
                 </div>
-            `).join('');
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #ef4444;"></div>
+                    <span>Expenses</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #3b82f6;"></div>
+                    <span>Net</span>
+                </div>
+            `;
             
-            // Update center amount
-            const totalIncome = amounts.reduce((a, b) => a + b, 0);
-            document.getElementById('incomeAmount').textContent = formatCurrency(totalIncome);
+            // Destroy existing chart if it exists
+            if (incomeChart) {
+                incomeChart.destroy();
+            }
             
-            if (!incomeChart) {
-                incomeChart = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: categories,
-                        datasets: [{
-                            data: amounts,
-                            backgroundColor: categoryColors,
-                            hoverOffset: 6,
-                            borderWidth: 0
-                        }]
+            // Create new chart
+            incomeChart = new Chart(ctx, {
+                type: chartView,
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: 'Income',
+                            data: incomeData,
+                            borderColor: '#10b981',
+                            backgroundColor: chartView === 'bar' ? '#10b981' : 'transparent',
+                            tension: 0.4,
+                            fill: false
+                        },
+                        {
+                            label: 'Expenses',
+                            data: expenseData,
+                            borderColor: '#ef4444',
+                            backgroundColor: chartView === 'bar' ? '#ef4444' : 'transparent',
+                            tension: 0.4,
+                            fill: false
+                        },
+                        {
+                            label: 'Net',
+                            data: netData,
+                            borderColor: '#3b82f6',
+                            backgroundColor: chartView === 'bar' ? '#3b82f6' : 'transparent',
+                            tension: 0.4,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.raw || 0;
+                                    return `${label}: ${formatCurrency(value)}`;
+                                }
+                            }
+                        }
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '70%',
-                        plugins: {
-                            legend: { 
-                                display: false
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const label = context.label || '';
-                                        const value = context.raw || 0;
-                                        const total = amounts.reduce((a, b) => a + b, 0);
-                                        const percentage = ((value / total) * 100).toFixed(1);
-                                        return `${label}: ${formatCurrency(value)} (${percentage}%)`;
-                                    }
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatCurrency(value);
                                 }
                             }
                         }
                     }
-                });
-            } else {
-                incomeChart.data.labels = categories;
-                incomeChart.data.datasets[0].data = amounts;
-                incomeChart.data.datasets[0].backgroundColor = categoryColors;
-                incomeChart.update();
-            }
+                }
+            });
         }
 
         function getCurrentWeekData() {
@@ -499,4 +556,4 @@
         // Initialize
         loadTransactions();
         updateCategoryOptions();
-        updateUI()
+        updateUI();
