@@ -6,6 +6,7 @@
     <title>Budget Tracker</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* All your existing CSS styles remain the same */
         :root {
             --primary: #667eea;
             --primary-dark: #5568d3;
@@ -1414,7 +1415,7 @@
                 }).join('');
             }
 
-            // Update All Tab
+            // Update All Tab - THIS IS THE FIXED PART
             const allList = document.getElementById('allList');
             if (monthTransactions.length === 0) {
                 allList.innerHTML = `
@@ -1423,7 +1424,24 @@
                         <p>No transactions yet</p>
                     </div>
                 `;
+                document.getElementById('allTotal').textContent = '₱0.00';
             } else {
+                // Calculate totals for all transactions in the current month view
+                const allIncome = monthTransactions
+                    .filter(t => t.type === 'income')
+                    .reduce((sum, t) => sum + t.amount, 0);
+                    
+                const allExpenses = monthTransactions
+                    .filter(t => t.type === 'expense')
+                    .reduce((sum, t) => sum + t.amount, 0);
+                    
+                const allNet = allIncome - allExpenses;
+                
+                // Update the allTotal display
+                document.getElementById('allTotal').textContent = 
+                    `Income: ${formatCurrency(allIncome)} | Expenses: ${formatCurrency(allExpenses)} | Net: ${formatCurrency(allNet)}`;
+                
+                // Group by date
                 const groupedByDate = {};
                 monthTransactions.forEach(t => {
                     if (!groupedByDate[t.date]) {
